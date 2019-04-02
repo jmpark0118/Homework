@@ -1,0 +1,157 @@
+---
+title: "How to create professional reports from R scripts"
+author: "jmpark"
+date: "2019년 3월 31일"
+output: html_document
+---
+
+### [How to create professional reports from R scripts, with custom styles](https://www.r-bloggers.com/how-to-create-professional-reports-from-r-scripts-with-custom-styles/)
+
+- R script를 이용해서 report를 만드는 것의 장점
+    + Rmd 파일로 만들기 위해 코드를 일일이 옮기고 code chuck를 작성하지 않아도 된다.
+    + 코드를 쉽게 실행시키고 comment도 쉽게 작성할 수 있다.
+
+### 1. Creating reports directly from R scripts
+
+  + `script.R` 이라는 이름으로 파일 저장 (R script 이용)
+
+```{r, eval=FALSE}
+#' # This is just an R script
+#' ## Rendered to a html report with knitr::spin()
+#' * just by adding comments we can make a really nice output
+
+#'
+#' > And the code runs just like normal, eg. via `Rscript` after all
+#' __comments__ are just *comments*.
+#'
+#' ## The report begins here
+#+
+knitr::kable(head(mtcars))
+
+#' ## A chart
+#+ fig.width=8, fig.height=8
+heatmap(cor(mtcars))
+
+#' ## Some tips
+#'
+#' 1. Optional chunk options are written using `#+`
+#' 1. You can write comments between `/*` and `*/`
+
+```
+
+
+  + Console창에 아래의 코드를 사용하여 R script로부터 바로 report를 만들 수 있다.
+  
+```{r, eval=FALSE}
+# with knitr directly
+knitr::spin("script.R")
+
+# or with rmarkdown
+rmarkdown::render("script.R")
+
+```
+
+![`script.R` output](C:/Users/jeong/Documents/3SEMESTER/2019_spring/script_R.png)
+
+
+### 2. Using knitr's spin directly
+  + Changing the options that govern the default values and just call spin() as before
+```{r, message=FALSE, warning=FALSE}
+options = getOption("markdown.HTML.options")
+extensions = getOption("markdown.extensions") 
+stylesheet = getOption("markdown.HTML.stylesheet")
+template = getOption("markdown.HTML.template")
+
+library(markdown)
+options()[c(
+  "markdown.HTML.options",
+  "markdown.extensions",
+  "markdown.HTML.stylesheet"
+)]
+
+# 옵션을 변경하여 원하는 조합으로 report를 만들 수 있다.
+options(
+  markdown.extensions = "fenced_code",
+  markdown.HTML.options = "base64_images",
+  markdown.HTML.stylesheet = "C:/Users/jeong/Documents/R/win-library/3.5/markdown/resources/markdown.css"
+)
+```
+
+  + Console창에 입력하면 report 작성
+```{r, eval=FALSE}
+knitr::spin("script.R")
+
+```
+
+  + Perform the report creation in 2 steps
+  + Console창에 다음과 같이 입력
+  + [download Markdown css](https://github.com/markdowncss)
+```{r, eval=FALSE}
+# script.Rmd 파일 생성
+knitr::spin("script.R", knit = FALSE)
+
+# Now create the final HTML output from
+# script.Rmd with custom `air.css`
+knitr::knit2html(
+  input = "script.Rmd",
+  stylesheet = "C:/Users/jeong/Documents/R/win-library/3.5/markdown/resources/air.css"
+)
+
+```
+
+![`script.R` output with custom `air.css`](C:/Users/jeong/Documents/3SEMESTER/2019_spring/knitr.png)
+
+### 3. Using rmarkdown's render
+  * `markdown::render()`와  `knit()`의 차이점
+    + render() will by default include inline base64 representations of fonts and JavaScript sources
+    + also include some potentially useful metadata, such as the author’s name and the date of rendering  
+
+  + Console창에 다음과 같이 입력
+
+```{r, eval=FALSE}
+rmarkdown::render(
+  "script.R", 
+  output_format = rmarkdown::html_document(
+    theme = NULL,
+    mathjax = NULL,
+    highlight = NULL,
+    css = "C:/Users/jeong/Documents/R/win-library/3.5/markdown/resources/modest.css"
+  )
+)
+
+```
+![`script.R` output with custom `air.css`](C:/Users/jeong/Documents/3SEMESTER/2019_spring/air.png)  
+
+![`script.R` output with custom `retro.css`](C:/Users/jeong/Documents/3SEMESTER/2019_spring/retro.png)  
+
+![`script.R` output with custom `modest.css`](C:/Users/jeong/Documents/3SEMESTER/2019_spring/modest.png)  
+
+
+
+### 4. TL;DR: Just show me the examples
+  + [More examples at GitLab repo](https://gitlab.com/jozefhajnala/gists/tree/master/rmarkdown/spin)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
