@@ -1,0 +1,223 @@
+---
+title: "Network Analysis of Emotions"
+author: "182STG08 박정민"
+date: "2019년 3월 28일"
+output:
+  html_document :
+    df_print : paged
+---
+
+[Network Analysis of Emotions](https://www.r-bloggers.com/network-analysis-of-emotions/)
+
+* create a visual network of emotions
+* collected from 11,000 participants on the emotions they felt at a given moment
+* different emotions are highly interconnected, such that one emotion morphs into another and so on  
+
+
+What is a network?
+
+* a complex set of interrelations between variables
+    + `nodes` : variables (in this case, emotions)
+    + `edges` : the relationships between the variables  
+
+
+```{r, warning=FALSE, message=FALSE}
+library(tidyverse)
+# download data
+emotion_raw <- read_csv("https://osf.io/e7uab/download") %>%
+  rename(Offense = Ofense,
+         Embarrassment = Embarassment)
+emotion_raw
+
+```
+
+
+### Edge data set
+```{r, message=FALSE, warning=FALSE}
+# id, Hour, Day별로 나타난 감정 분류
+emotion_long <- emotion_raw %>%
+  gather(emotion_type, value, Pride:Anger) %>%
+  arrange(id, Day) %>%
+  filter(value == 1) %>%
+  select(-value)
+emotion_long
+
+emotion_edges <- emotion_long %>%
+  mutate(second_emotion = lead(emotion_type)) %>%  # lead : find next value
+  rename(first_emotion = emotion_type) %>%
+  select(id, Day, Hours, first_emotion, second_emotion) %>%
+  group_by(id) %>%
+  slice(-length(id))  # id가 바뀔때의 행 제거
+emotion_edges
+
+```
+
+### Node data set
+```{r, message=FALSE, warning=FALSE}
+emotion_nodes <- emotion_long %>%
+  count(emotion_type) %>%
+  rowid_to_column("id") %>%  # adds a column at the start of the dataframe
+  rename(label = emotion_type) %>%
+  mutate(valence = ifelse(label %in% c("Awe", "Amusement", "Joy", "Alertness",
+                                       "Hope", "Love", "Gratitude", "Pride",
+                                       "Satisfaction"),
+                          "positive", "negative"))
+emotion_nodes
+
+```
+
+
+### Network data set
+```{r, message=FALSE, warning=FALSE}
+emotion_network <- emotion_edges %>%
+  group_by(first_emotion, second_emotion) %>%
+  summarize(weight = n()) %>%
+  ungroup() %>%
+  select(first_emotion, second_emotion, weight)
+emotion_network
+
+edges <- emotion_network %>%
+  left_join(emotion_nodes, by = c("first_emotion" = "label")) %>%
+  rename(from = id)
+edges <- tibble::as.tibble(edges)
+tibble:::print.tbl(head(edges))
+
+edges <- edges %>%
+  left_join(emotion_nodes, by = c("second_emotion" = "label")) %>%
+  rename(to = id) %>%
+  select(from, to, weight) %>%
+  mutate(weight = ifelse(weight > 4500, 4500, weight))
+edges <- tibble::as.tibble(edges)
+tibble:::print.tbl(head(edges))
+
+
+```
+
+
+### Visualization
+```{r, message=FALSE, warning=FALSE, fig.align='center'}
+library(tidygraph)
+library(ggraph)
+
+network <- tbl_graph(emotion_nodes, edges, directed = TRUE)
+network
+
+set.seed(190318)
+
+ggraph(network, layout = "graphopt") +
+  geom_edge_link(aes(width = weight, color = scale(weight), alpha = weight), check_overlap = TRUE) +
+  scale_edge_color_gradient2(low = "darkgrey", mid = "#00BFFF", midpoint = 1.5, high = "dodgerblue2") +
+  scale_edge_width(range = c(.2, 1.75)) +
+  geom_node_label(aes(label = label, fill = valence), size = 4) +
+  scale_fill_manual(values = c("#FF6A6A", "#43CD80")) +
+  theme_graph() +
+  theme(legend.position = "none", plot.background = element_rect(fill = "black"))
+
+```
+
+
+### Using `networkD3`
+
+> VERY IMPORTANT to transform the values to base 0
+
+```{r, message=FALSE, warning=FALSE}
+library(networkD3)
+
+nodes_d3 <- emotion_nodes %>%
+  mutate(id = id - 1,
+         n = (scale(n) + 3)^3)
+
+edges_d3 <- edges %>%
+  mutate(from = from - 1, to = to - 1,
+         weight = ifelse(weight < 600, 0, log(weight)))
+
+nodes_d3
+edges_d3
+
+```
+
+
+```{r, message=FALSE, warning=FALSE, fig.width=8, fig.height=8, fig.align='center'}
+forceNetwork(Links = edges_d3, 
+             Nodes = nodes_d3, 
+             Source = "from", Nodesize = "n",
+             Target = "to", NodeID = "label", 
+             Group = "valence", Value = "weight", 
+             fontFamily = "sans-serif",
+             colourScale = JS('d3.scaleOrdinal().domain(["negative", "positive"]).range(["#FF6A6A", "#43CD80"])'),
+             opacity = 1, fontSize = 24, linkDistance = 300, linkColour = c("#8DB6CD"),
+             arrows = TRUE, zoom = TRUE, bounded = TRUE, legend = TRUE)
+
+```
+
+
+```{r, message=FALSE, warning=FALSE}
+library(networkD3)
+titanic <- DALEX::titanic
+titanic <- titanic[complete.cases(titanic),]
+dim(titanic)
+titanic <- titanic %>% 
+  mutate(Age=as.factor(ifelse(age<20,'Child','Adult')))
+
+myedge <- titanic %>% 
+  group_by(Age, class, gender, survived) %>% count()
+myNODE <- c(as.character(unique(myedge$Age)),
+      as.character(unique(myedge$class)),
+      as.character(unique(myedge$gender)),
+      as.character(unique(myedge$survived)))
+myNODE <- as.data.frame(myNODE) %>% 
+  rowid_to_column('id') %>% mutate('id'=id-1)
+myNODE$myNODE <- as.character(myNODE$myNODE)
+myNODE <- as.data.frame(myNODE)
+
+myedge2 <- titanic %>% 
+  group_by(Age,class) %>% count() %>% 
+  left_join(myNODE, by = c('Age' = 'myNODE')) %>% 
+  ungroup() %>% 
+  rename(from = id) %>% select(-Age) %>% 
+  left_join(myNODE, by = c('class' = 'myNODE')) %>% 
+  rename(to = id) %>% select(-class)
+
+myedge3 <- titanic %>% 
+  group_by(class,gender) %>% count() %>% 
+  left_join(myNODE, by = c('class' = 'myNODE')) %>% 
+  ungroup() %>% 
+  rename(from = id) %>% select(-class) %>% 
+  left_join(myNODE, by = c('gender' = 'myNODE')) %>% 
+  rename(to = id) %>% select(-gender)
+
+myedge4 <- titanic %>% 
+  group_by(gender,survived) %>% count() %>% 
+  left_join(myNODE, by = c('gender' = 'myNODE')) %>% 
+  ungroup() %>% 
+  rename(from = id) %>% select(-gender) %>% 
+  left_join(myNODE, by = c('survived' = 'myNODE')) %>% 
+  rename(to = id) %>% select(-survived)
+
+myEDGE <- rbind(myedge2,myedge3,myedge4)
+
+sankeyNetwork(Links = myEDGE, Nodes = myNODE,
+              Source = "from", Target = "to",
+              Value = "n", NodeID = "myNODE",
+              fontSize = 10, nodeWidth = 10)
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
