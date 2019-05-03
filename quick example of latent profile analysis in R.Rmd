@@ -1,0 +1,206 @@
+---
+title: "quick example of latent profile analysis in r"
+author: "jmpark"
+date: "2019년 5월 2일"
+output: 
+  html_document :
+    df_print : paged
+---
+
+[Quick example of Latent Profile Analysis in R](https://www.r-bloggers.com/quick-example-of-latent-profile-analysis-in-r/)  
+
+* LPA(Latent Profile Analysis)
+    + identify clusters of individuals based on responses to a series of continuous variables
+    + LPA assumes that there are unobserved latent profiles that generate patterns of responses on indicator items  
+
+* Data
+    + [Young people survey](https://www.kaggle.com/miroslavsabo/young-people-survey)
+    + Explore the preferences, interests, habits, opinions, and fears of young people
+```{r, message=FALSE, warning=FALSE}
+library(tidyverse)
+survey <- read_csv("https://raw.githubusercontent.com/whipson/tidytuesday/master/young_people.csv") %>%
+  select(History:Pets)
+dim(survey)
+head(survey)
+```
+
+* There may be careless responding (eg. participants who selected the same value over and over)
+    + use the `careless` package
+```{r, message=FALSE, warning=FALSE}
+library(careless)
+library(psych)
+
+interests <- survey %>%
+  mutate(string = longstring(.)) %>%
+  mutate(md = outlier(., plot = FALSE))
+```
+
+* `careless::longstring` : identifies the longest string of identical consecutive responses for each observation
+* `psych::outlier` : find and graph Mahalanobis squared distances to detect outliers
+
+```{r}
+head(interests)
+```
+
+* cap string responding to a maximum of 10 
+* use a Mahalanobis D cutoff of alpha = .001.
+```{r, message=FALSE, warning=FALSE}
+cutoff <- (qchisq(p = 1 - .001, df = ncol(interests)))
+cutoff
+interests_clean <- interests %>%
+  filter(string <= 10,
+         md < cutoff) %>%
+  select(-string, -md)
+dim(interests_clean)
+head(interests_clean)
+```
+
+* `mclust`
+     + performs various types of model-based clustering and dimension reduction
+     + requires complete data (no missing)
+     
+```{r, message=FALSE, warning=FALSE, fig.align='center'}
+library(mclust)
+
+interests_clustering <- interests_clean %>%
+  na.omit() %>%
+  mutate_all(list(scale))  # scale to see the differences more clearly
+head(interests_clustering)
+
+BIC <- mclustBIC(interests_clustering)
+plot(BIC)
+```
+
+```{r, message=FALSE, warning=FALSE}
+mclustModelNames
+summary(BIC)
+mod1 <- Mclust(interests_clustering, modelNames = "VEE", G = 3, x = BIC)
+summary(mod1)
+```
+
+* ICL(Integrated Completed Likelihood)
+    + adds a penalty on solutions with greater *entropy* or classification uncertainty
+```{r, message=FALSE, warning=FALSE}
+ICL <- mclustICL(interests_clustering)
+plot(ICL)
+summary(ICL)
+```
+
+* BLRT(Bootstrap Likelihood Ratio Test)
+    + compares model fit between *k-1* and *k* cluster models
+```{r, message=FALSE, warning=FALSE}
+mclustBootstrapLRT(interests_clustering, modelName = "VEE")
+```
+
+### Visualizing LPA
+```{r, message=FALSE, warning=FALSE, fig.align='center', fig.width=9, fig.height=6}
+library(reshape2)
+means <- data.frame(mod1$parameters$mean, stringsAsFactors = FALSE) %>%
+  rownames_to_column() %>%
+  rename(Interest = rowname) %>%
+  melt(id.vars = "Interest", variable.name = "Profile", value.name = "Mean") %>%
+  mutate(Mean = round(Mean, 2),
+         Mean = ifelse(Mean > 1, 1, Mean))
+round(table(mod1$classification)/nrow(interests_clustering),2)
+means
+
+means %>%
+  ggplot(aes(Interest, Mean, group = Profile, color = Profile)) +
+  geom_point(size = 2.25) +
+  geom_line(size = 1.25) +
+  scale_x_discrete(limits = c("Active sport", "Adrenaline sports", "Passive sport",
+                              "Countryside, outdoors", "Gardening", "Cars",
+                              "Art exhibitions", "Dancing", "Musical instruments",
+                              "Theatre", "Writing", "Reading","Geography", 
+                              "History", "Law", "Politics", "Psychology", "Religion", 
+                              "Foreign languages", "Biology", "Chemistry", "Mathematics", 
+                              "Medicine", "Physics", "Science and technology",
+                              "Internet", "PC","Celebrities", "Economy Management",
+                              "Fun with friends", "Shopping", "Pets")) +
+  labs(x = NULL, y = "Standardized mean interest") +
+  theme_bw(base_size = 14) +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1), legend.position = "top")
+```
+
+* red group : interested in science
+* blue group : interested in arts and humanities
+* green group : disinterested in both science and art, but moderately interested in other things
+
+```{r, message=FALSE, warning=FALSE}
+library(knitr)
+library(kableExtra)
+data <- data.frame(mod1$parameters$mean, stringsAsFactors = FALSE) %>%
+  rownames_to_column() %>%
+  rename(Interest = rowname) %>%
+  mutate(X1 = round(X1, 2),
+         X1 = ifelse(X1 > 1, 1, X1),
+         X2 = round(X2, 2),
+         X2 = ifelse(X2 > 1, 1, X2),
+         X3 = round(X3, 2),
+         X3 = ifelse(X3 > 1, 1, X3))
+         
+data %>%
+  mutate(
+    X1 = cell_spec(X1, "html", color = ifelse(X1 > 0.3, "red", "black")),
+    X2 = cell_spec(X2, "html", color = ifelse(X2 > 0.3, "red", "black")),
+    X3 = cell_spec(X3, "html", color = ifelse(X3 > 0.3, "red", "black"))) %>%
+  kable(format = "html", escape = F) %>%
+  kable_styling("striped", full_width = F)
+```
+
+```{r, message=FALSE, warning=FALSE, fig.align='center', fig.width=9, fig.height=6}
+p <- means %>%
+  mutate(Profile = recode(Profile, 
+                          X1 = "Science: 16%",
+                          X2 = "Disinterest: 60%",
+                          X3 = "Arts & Humanities: 24%")) %>%
+  ggplot(aes(Interest, Mean, group = Profile, color = Profile)) +
+  geom_point(size = 2.25) +
+  geom_line(size = 1.25) +
+  scale_x_discrete(limits = c("Active sport", "Adrenaline sports", "Passive sport",
+                              "Countryside, outdoors", "Gardening", "Cars",
+                              "Art exhibitions", "Dancing", "Musical instruments", 
+                              "Theatre", "Writing", "Reading", "Geography",
+                              "History", "Law", "Politics", "Psychology", "Religion",
+                              "Foreign languages", "Biology", "Chemistry", "Mathematics", 
+                              "Medicine", "Physics", "Science and technology",
+                              "Internet", "PC", "Celebrities", "Economy Management",
+                              "Fun with friends", "Shopping", "Pets")) +
+  labs(x = NULL, y = "Standardized mean interest") +
+  theme_bw(base_size = 14) +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1), legend.position = "top")
+
+p
+```
+
+* interactive plot
+```{r, message=FALSE, warning=FALSE, fig.align='center', fig.width=9, fig.height=6}
+library(plotly)
+ggplotly(p, tooltip = c("Interest", "Mean")) %>%
+  layout(legend = list(orientation = "h", y = 1.2))
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
