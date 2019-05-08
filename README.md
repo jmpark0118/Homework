@@ -45,3 +45,12 @@
     + assumes that there are unobserved latent profiles that generate patterns of responses on indicator items
     + chooses the best cluster size using methods such as BIC
    
+</br>
+   
+### [Packages for ROC Curves](https://www.r-bloggers.com/some-r-packages-for-roc-curves/)
+<img src="image/roc.PNG" width="700">
+   
+* Find out what packages are used most frequently
+    + `dlstats::cran_stats`
+    + `pkgsearch::pkg_search`
+* Various way to draw ROC curves
