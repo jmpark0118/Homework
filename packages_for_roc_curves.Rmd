@@ -1,0 +1,140 @@
+---
+title: "some-r-packages-for-roc-curves"
+author: "jmpark"
+date: "2019년 3월 15일"
+output: html_document
+---
+
+* [Some R Packages for ROC Curves](https://www.r-bloggers.com/some-r-packages-for-roc-curves/)  
+
+
+```{r,warning=FALSE,message=FALSE}
+library(tidyverse)  # for data manipulation
+library(dlstats)    # for package download stats
+library(pkgsearch)  # for searching packages
+
+# searches through package text fields, and produces a score for each package it finds that is weighted by the number of reverse dependencies and downloads
+rocPkg <-  pkg_search(query="ROC",size=200)
+colnames(rocPkg)
+# `score` : Score of hit  
+# `package` : Package name  
+# `maintainer_name` : Name of the package maintainer  
+# `downloads_last_month` : Raw number of package downloads last month from the RStudio CRAN mirror
+
+```
+
+
+```{r,message=FALSE,warning=FALSE}
+rocPkgShort <- rocPkg %>% 
+               filter(maintainer_name != "ORPHANED", score > 190) %>%
+               select(score, package, downloads_last_month) %>%
+               arrange(desc(downloads_last_month))
+head(as_tibble(rocPkgShort))
+
+```
+
+```{r,message=FALSE,warning=FALSE,fig.width=10}
+library(dlstats)
+shortList <- c("pROC","precrec","ROCit", "PRROC","ROCR","plotROC")
+downloads <- cran_stats(shortList)  # montly download stats of cran packages
+head(downloads)
+ggplot(downloads, aes(end, downloads, group=package, color=package)) +
+  geom_line() + geom_point(aes(shape=package)) +
+  scale_y_continuous(trans = 'log2')
+
+```
+
+* ROCR-2005
+```{r,message=FALSE,warning=FALSE}
+library(ROCR)
+# plot a ROC curve for a single prediction run
+# and color the curve according to cutoff.
+data(ROCR.simple)
+df <- data.frame(ROCR.simple)
+head(df)
+# every classifier evaluation using ROCR starts with creating a prediction object
+# this function transforms the input data into a standardized format
+pred <- prediction(df$predictions, df$labels)
+# all kinds of predictor evaluations are performed using this function
+perf <- performance(pred,"tpr","fpr")  
+plot(perf,colorize=TRUE)
+
+```
+
+* pROC-2010
+```{r,warning=FALSE,message=FALSE,fig.width=6,fig.height=6}
+library(pROC)
+pROC_obj <- roc(df$labels,df$predictions,
+            ci=TRUE, plot=TRUE, auc.polygon=TRUE, 
+            max.auc.polygon=TRUE, grid=TRUE,
+            auc = TRUE)
+
+
+sens.ci <- ci.se(pROC_obj)
+plot(sens.ci, type="shape", col="lightblue")
+
+plot(sens.ci, type="bars")
+
+plot.roc(pROC_obj,add = T,print.thres = 'best')
+
+```
+
+* PRROC-2014
+```{r,message=FALSE,warning=FALSE}
+library(PRROC)
+PRROC_obj <- roc.curve(scores.class0 = df$predictions, 
+                       weights.class0=df$labels,
+                       curve=TRUE)
+plot(PRROC_obj)
+
+```
+
+* plotROC-2014
+```{r,message=FALSE,warning=FALSE}
+library(plotROC)
+rocplot <- ggplot(df, aes(m = predictions, d = labels)) +
+  geom_roc(n.cuts=20,labels=FALSE) # n.cuts : Number of cutpoints to display along each curve
+
+# geom_rocci() : Display rectangular confidence regions for the empirical ROC curve
+rocplot + style_roc(theme = theme_grey) + geom_rocci(fill="pink")
+
+```
+
+* precrec-2015
+```{r,message=FALSE,warning=FALSE,fig.width=10}
+library(precrec)
+precrec_obj <- evalmod(scores = df$predictions, labels = df$labels)
+autoplot(precrec_obj)
+
+```
+
+```{r,message=FALSE,warning=FALSE,fig.width=10,fig.height=10}
+precrec_obj2 <- evalmod(scores = df$predictions, labels = df$labels, mode="basic")
+autoplot(precrec_obj2)
+
+```
+
+* ROCit-2019
+```{r,message=FALSE,warning=FALSE}
+library(ROCit)
+ROCit_obj <- rocit(score=df$predictions,class=df$labels)
+plot(ROCit_obj)
+
+# Generates cumulative density of diagnostic variable in positive and negative responses
+ksplot(ROCit_obj)
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
